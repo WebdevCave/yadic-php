@@ -1,2 +1,2 @@
-# yadic-php
-Yet another dependency injection for PHP
+# Yadic
+Yet another dependency injection container for PHP
