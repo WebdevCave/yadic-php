@@ -15,6 +15,8 @@ composer require webdevcave/yadic
 
 Alternatively, you can clone the repository or download the source files directly and include them in your project.
 
+## Usage
+
 ```php
 <?php
 
