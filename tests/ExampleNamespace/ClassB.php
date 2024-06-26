@@ -9,8 +9,7 @@ class ClassB
     public function __construct(
         public ClassA $a,
         public int $count = 2
-    )
-    {
+    ) {
         static::increaseCounter();
     }
 }

@@ -13,6 +13,7 @@ use Webdevcave\Yadic\Tests\ExampleNamespace\InterfaceA;
 class ServiceContainerTest extends TestCase
 {
     private ?ServiceContainer $container;
+
     public function testInstancing(): void
     {
         $this->assertInstanceOf(ClassA::class, $this->container->get(ClassA::class));
