@@ -32,5 +32,11 @@
   },
   "scripts": {
     "test": "./vendor/bin/phpunit ./tests"
+  },
+  "scripts-descriptions": {
+    "test": "Run PHPUNIT tests"
+  },
+  "provide": {
+    "psr/container-implementation": "2"
   }
 }
