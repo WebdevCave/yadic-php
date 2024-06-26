@@ -1,0 +1,35 @@
+{
+  "name": "webdevcave/yadic",
+  "description": "Yet another dependency injection container for PHP",
+  "type": "library",
+  "license": "MIT",
+  "autoload": {
+    "psr-4": {
+      "Webdevcave\\Yadic\\": "src/"
+    }
+  },
+  "autoload-dev": {
+    "psr-4": {
+      "Webdevcave\\Yadic\\Tests\\": "tests/"
+    }
+  },
+  "authors": [
+    {
+      "name": "Carlos A. B. Carucce",
+      "homepage": "https://github.com/carloscarucce"
+    }
+  ],
+  "require": {
+    "php": ">=8.1",
+    "psr/container": "^2.0",
+    "psr/simple-cache": "^3.0",
+    "webdevcave/directory-crawler": "^1.1",
+    "webdevcave/simple-cache": "^1.0"
+  },
+  "require-dev": {
+    "phpunit/phpunit": "^11"
+  },
+  "scripts": {
+    "test": "./vendor/bin/phpunit ./tests"
+  }
+}
