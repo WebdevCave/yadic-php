@@ -8,7 +8,7 @@ trait CountsInstancesTrait
 
     public static function increaseCounter(): void
     {
-        static::$instancesCounter ++;
+        static::$instancesCounter++;
     }
 
     public static function resetCounter(): void
