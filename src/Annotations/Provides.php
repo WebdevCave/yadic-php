@@ -9,5 +9,7 @@ class Provides
 {
     public function __construct(
         public readonly string $index
-    ) {}
+    )
+    {
+    }
 }

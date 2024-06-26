@@ -9,5 +9,7 @@ class Inject
 {
     public function __construct(
         public readonly ?string $index = null
-    ) {}
+    )
+    {
+    }
 }
