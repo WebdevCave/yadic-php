@@ -31,6 +31,7 @@ interface StorageInterface
     public function store(mixed $data): bool;
 }
 
+#[Provides('storage')]
 #[Provides(StorageInterface::class)]
 #[Singleton]
 class Storage implements StorageInterface
@@ -63,6 +64,7 @@ $container->addAlias(StorageInterface::class, Storage::class);
 
 //Use this instead:
 //$container->loadDefinitionsFromDirectory($directory, $namespace); //Loads annotations from classes declared in a PSR4 directory
+//var_dump($container->get('storage')->store($data));
 
 var_dump($container->get(MyController::class)->save()); //bool(true)
 ```
