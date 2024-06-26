@@ -89,7 +89,12 @@ class ServiceContainer implements ContainerInterface
         try {
             $className = $this->aliases[$id] ?? $id;
             $reflectionClass = new ReflectionClass($className);
-            $arguments = $this->createArguments($reflectionClass->getConstructor());
+            $arguments = [];
+
+            if ($constructor = $reflectionClass->getConstructor()) {
+                $arguments = $this->createArguments($constructor);
+            }
+
             $instance = $reflectionClass->newInstanceArgs($arguments);
 
             if (!empty($reflectionClass->getAttributes(Singleton::class))) {
