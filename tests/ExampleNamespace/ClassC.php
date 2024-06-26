@@ -9,13 +9,12 @@ class ClassC
     public function __construct(
         public ClassA $a,
         public ClassB $b
-    )
-    {
+    ) {
         static::increaseCounter();
     }
 
     public function sayHello()
     {
-        echo "Hello World!";
+        echo 'Hello World!';
     }
 }
