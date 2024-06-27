@@ -12,9 +12,4 @@ class ClassC
     ) {
         static::increaseCounter();
     }
-
-    public function sayHello()
-    {
-        echo 'Hello World!';
-    }
 }
