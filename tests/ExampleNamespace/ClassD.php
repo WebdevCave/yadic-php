@@ -9,7 +9,8 @@ class ClassD
 
     public function __construct(
         int $x
-    ) {
+    )
+    {
         static::increaseCounter();
     }
 }

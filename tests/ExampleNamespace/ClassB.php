@@ -11,7 +11,8 @@ class ClassB
     public function __construct(
         #[Inject] public ClassA $a,
         public int $count = 2
-    ) {
+    )
+    {
         static::increaseCounter();
     }
 }
