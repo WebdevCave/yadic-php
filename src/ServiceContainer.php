@@ -45,34 +45,14 @@ class ServiceContainer implements ContainerInterface
     }
 
     /**
-     * @throws InvalidArgumentException
-     */
-    public function __destruct()
-    {
-        $this->cache->set('aliases', $this->aliases);
-        $this->cache->set('singletons', $this->singletons);
-    }
-
-    /**
-     * @param string $alias
-     * @param string $concrete
-     *
-     * @return void
-     */
-    public function addAlias(string $alias, string $concrete): void
-    {
-        $this->aliases[$alias] = $concrete;
-    }
-
-    /**
      * Finds an entry of the container by its identifier and returns it.
      *
      * @template T
      *
      * @param T $id Identifier of the entry to look for.
      *
-     * @throws ContainerExceptionInterface Error while retrieving the entry.
      * @throws NotFoundExceptionInterface  No entry was found for **this** identifier.
+     * @throws ContainerExceptionInterface Error while retrieving the entry.
      *
      * @return T
      */
@@ -126,57 +106,12 @@ class ServiceContainer implements ContainerInterface
     }
 
     /**
-     * @param callable $function
-     * @param array    $arguments
-     *
-     * @throws ContainerExceptionInterface
-     * @throws NotFoundExceptionInterface
-     * @throws ReflectionException
-     *
-     * @return mixed
-     */
-    public function invoke(callable $function, array $arguments = []): mixed
-    {
-        $reflection = new ReflectionFunction(Closure::fromCallable($function));
-        $arguments = $this->createArguments($reflection, $arguments);
-
-        return $reflection->invokeArgs($arguments);
-    }
-
-    /**
-     * @param string $directory
-     * @param string $namespace
-     * @param bool   $enforce
-     *
-     * @throws ReflectionException
-     *
-     * @return void
-     */
-    public function loadDefinitionsFromDirectory(string $directory, string $namespace, bool $enforce = false): void
-    {
-        $crawler = new Crawler($directory);
-        $classes = $crawler->classes($namespace, $enforce);
-
-        foreach ($classes as $class) {
-            $reflectionClass = new ReflectionClass($class);
-
-            if ($provideAttrs = $reflectionClass->getAttributes(Provides::class)) {
-                foreach ($provideAttrs as $attr) {
-                    /* @var $provide Provides */
-                    $provide = $attr->newInstance();
-                    $this->addAlias($provide->index, $class);
-                }
-            }
-        }
-    }
-
-    /**
      * @param ReflectionMethod|ReflectionFunction $reflectionMethod
      * @param array                               $arguments
      *
-     * @throws ContainerExceptionInterface
      * @throws NotFoundExceptionInterface
      * @throws ReflectionException
+     * @throws ContainerExceptionInterface
      *
      * @return array
      */
@@ -217,5 +152,70 @@ class ServiceContainer implements ContainerInterface
         }
 
         return $arguments;
+    }
+
+    /**
+     * @throws InvalidArgumentException
+     */
+    public function __destruct()
+    {
+        $this->cache->set('aliases', $this->aliases);
+        $this->cache->set('singletons', $this->singletons);
+    }
+
+    /**
+     * @param callable $function
+     * @param array    $arguments
+     *
+     * @throws NotFoundExceptionInterface
+     * @throws ReflectionException
+     * @throws ContainerExceptionInterface
+     *
+     * @return mixed
+     */
+    public function invoke(callable $function, array $arguments = []): mixed
+    {
+        $reflection = new ReflectionFunction(Closure::fromCallable($function));
+        $arguments = $this->createArguments($reflection, $arguments);
+
+        return $reflection->invokeArgs($arguments);
+    }
+
+    /**
+     * @param string $directory
+     * @param string $namespace
+     * @param bool   $enforce
+     *
+     * @throws ReflectionException
+     *
+     * @return void
+     */
+    public function loadDefinitionsFromDirectory(string $directory, string $namespace, bool $enforce = false): void
+    {
+        $crawler = new Crawler($directory);
+        $classes = $crawler->classes($namespace, $enforce);
+
+        foreach ($classes as $class) {
+            $reflectionClass = new ReflectionClass($class);
+
+            if ($provideAttrs = $reflectionClass->getAttributes(Provides::class)) {
+                foreach ($provideAttrs as $attr) {
+                    /* @var $provide Provides */
+                    $provide = $attr->newInstance();
+                    $this->addAlias($provide->index, $class);
+                }
+            }
+        }
+    }
+
+    /**
+     * @param string $alias
+     * @param string $concrete
+     *
+     * @return void
+     */
+    public function addAlias(string $alias, string $concrete): void
+    {
+        $this->aliases[$alias] = $concrete;
     }
 }

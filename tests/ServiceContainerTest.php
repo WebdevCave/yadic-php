@@ -3,13 +3,24 @@
 namespace Webdevcave\Yadic\Tests;
 
 use Exception;
+use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\TestCase;
+use Webdevcave\Yadic\Annotations\Inject;
+use Webdevcave\Yadic\Annotations\Provides;
+use Webdevcave\Yadic\Annotations\Singleton;
+use Webdevcave\Yadic\Exceptions\ContainerException;
+use Webdevcave\Yadic\Exceptions\NotFoundException;
 use Webdevcave\Yadic\ServiceContainer;
 use Webdevcave\Yadic\Tests\ExampleNamespace\ClassA;
 use Webdevcave\Yadic\Tests\ExampleNamespace\ClassB;
 use Webdevcave\Yadic\Tests\ExampleNamespace\ClassC;
+use Webdevcave\Yadic\Tests\ExampleNamespace\ClassD;
 use Webdevcave\Yadic\Tests\ExampleNamespace\InterfaceA;
 
+#[CoversClass(ServiceContainer::class)]
+#[CoversClass(Provides::class)]
+#[CoversClass(Inject::class)]
+#[CoversClass(Singleton::class)]
 class ServiceContainerTest extends TestCase
 {
     private ?ServiceContainer $container;
@@ -68,6 +79,20 @@ class ServiceContainerTest extends TestCase
     public function testInvokeFunctionWithParameters(): void
     {
         $this->assertTrue($this->container->invoke([new ClassA(), 'funcWithParameters'], ['x' => 1]));
+    }
+
+    public function testResourceNotFound()
+    {
+        $this->expectException(NotFoundException::class);
+
+        $this->container->get('inexistent');
+    }
+
+    public function testNoAutowirableResource()
+    {
+        $this->expectException(ContainerException::class);
+
+        $this->container->get(ClassD::class);
     }
 
     protected function setUp(): void

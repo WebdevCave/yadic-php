@@ -2,13 +2,12 @@
 
 namespace Webdevcave\Yadic\Tests\ExampleNamespace;
 
-class ClassC
+class ClassD
 {
     use CountsInstancesTrait;
 
     public function __construct(
-        public ClassA $a,
-        public ClassB $b
+        int $x
     ) {
         static::increaseCounter();
     }
