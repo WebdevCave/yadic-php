@@ -25,6 +25,7 @@
         <report>
             <text outputFile="php://stdout"/>
             <html outputDirectory="build/coverage"/>
+            <clover outputFile="clover.xml"/>
         </report>
     </coverage>
 </phpunit>
