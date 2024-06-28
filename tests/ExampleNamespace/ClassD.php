@@ -2,9 +2,6 @@
 
 namespace Webdevcave\Yadic\Tests\ExampleNamespace;
 
-use Webdevcave\Yadic\Tests\ExampleNamespace\ClassA;
-use Webdevcave\Yadic\Tests\ExampleNamespace\ClassB;
-use Webdevcave\Yadic\Tests\ExampleNamespace\CountsInstancesTrait;
 
 class ClassD
 {
