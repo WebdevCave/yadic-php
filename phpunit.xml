@@ -23,7 +23,7 @@
 
     <coverage cacheDirectory="build/phpunit/cache">
         <report>
-            <text outputFile="php://stdout"/>
+            <text outputFile="build/coverage.txt"/>
             <html outputDirectory="build/coverage"/>
             <clover outputFile="build/coverage-clover.xml"/>
         </report>
