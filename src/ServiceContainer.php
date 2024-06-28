@@ -51,10 +51,10 @@ class ServiceContainer implements ContainerInterface
      *
      * @param T $id Identifier of the entry to look for.
      *
-     * @return T
      * @throws NotFoundExceptionInterface  No entry was found for **this** identifier.
-     *
      * @throws ContainerExceptionInterface Error while retrieving the entry.
+     *
+     * @return T
      */
     public function get(string $id): mixed
     {
@@ -109,17 +109,16 @@ class ServiceContainer implements ContainerInterface
      * @param ReflectionMethod|ReflectionFunction $reflectionMethod
      * @param array                               $arguments
      *
-     * @return array
      * @throws NotFoundExceptionInterface
      * @throws ReflectionException
-     *
      * @throws ContainerExceptionInterface
+     *
+     * @return array
      */
     private function createArguments(
         ReflectionMethod|ReflectionFunction $reflectionMethod,
         array $arguments = []
-    ): array
-    {
+    ): array {
         foreach ($reflectionMethod->getParameters() as $reflectionParameter) {
             $argumentName = $reflectionParameter->getName();
 
@@ -168,11 +167,11 @@ class ServiceContainer implements ContainerInterface
      * @param callable $function
      * @param array    $arguments
      *
-     * @return mixed
      * @throws NotFoundExceptionInterface
      * @throws ReflectionException
-     *
      * @throws ContainerExceptionInterface
+     *
+     * @return mixed
      */
     public function invoke(callable $function, array $arguments = []): mixed
     {
@@ -187,9 +186,9 @@ class ServiceContainer implements ContainerInterface
      * @param string $namespace
      * @param bool   $enforce
      *
-     * @return void
      * @throws ReflectionException
      *
+     * @return void
      */
     public function loadDefinitionsFromDirectory(string $directory, string $namespace, bool $enforce = false): void
     {
