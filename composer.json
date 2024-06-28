@@ -39,7 +39,8 @@
     "rregeer/phpunit-coverage-check": "^0.3.1"
   },
   "scripts": {
-    "test": "XDEBUG_MODE=coverage ./vendor/bin/phpunit"
+    "test": "XDEBUG_MODE=coverage ./vendor/bin/phpunit",
+    "check-coverage": "./vendor/bin/coverage-check ./build/coverage-clover.xml 85"
   },
   "scripts-descriptions": {
     "test": "Run PHPUNIT tests"

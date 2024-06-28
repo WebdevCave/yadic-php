@@ -36,5 +36,5 @@ jobs:
       # Docs: https://getcomposer.org/doc/articles/scripts.md
 
       - name: Run test suite
-        run: composer run-script test && \
-             ./vendor/bin/coverage-check clover.xml 80 --only-percentage
+        run: composer run-script test && composer run-script check-coverage
+
