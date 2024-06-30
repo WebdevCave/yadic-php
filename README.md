@@ -5,6 +5,7 @@
 [![Latest Unstable Version](https://poser.pugx.org/webdevcave/yadic/v/unstable?format=flat-square)](https://packagist.org/packages/webdevcave/yadic)
 [![Total Downloads](https://poser.pugx.org/webdevcave/yadic/downloads?format=flat-square)](https://packagist.org/packages/webdevcave/yadic)
 [![License](https://poser.pugx.org/webdevcave/yadic/license?format=flat-square)](https://packagist.org/packages/webdevcave/yadic)
+[![codecov](https://codecov.io/github/WebdevCave/yadic-php/graph/badge.svg?token=6GLECJQG16)](https://codecov.io/github/WebdevCave/yadic-php)
 
 This is a simple to use, yet powerful service container that provides a seamless way to automate dependency injection
 with auto-wiring.
