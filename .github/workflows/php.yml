@@ -39,6 +39,7 @@ jobs:
         run: composer run-script test && composer run-script check-coverage
 
       - name: Upload coverage reports to Codecov
+        if: github.event_name == 'push'
         uses: codecov/codecov-action@v4.0.1
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
