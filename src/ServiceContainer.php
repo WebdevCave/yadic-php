@@ -120,8 +120,7 @@ class ServiceContainer implements ContainerInterface
     private function createArguments(
         ReflectionMethod|ReflectionFunction $reflectionMethod,
         array $arguments = []
-    ): array
-    {
+    ): array {
         foreach ($reflectionMethod->getParameters() as $reflectionParameter) {
             $argumentName = $reflectionParameter->getName();
 
