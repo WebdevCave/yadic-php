@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Webdevcave\Yadic;
 
 use Closure;
@@ -49,14 +51,15 @@ class ServiceContainer implements ContainerInterface
      *
      * @template T
      *
-     * @param T $id Identifier of the entry to look for.
+     * @param T     $id        Identifier of the entry to look for.
+     * @param array $arguments Predefined arguments.
      *
      * @throws NotFoundExceptionInterface  No entry was found for **this** identifier.
      * @throws ContainerExceptionInterface Error while retrieving the entry.
      *
      * @return T
      */
-    public function get(string $id): mixed
+    public function get(string $id, array $arguments = []): mixed
     {
         if (isset($this->singletons[$id])) {
             return $this->singletons[$id];
@@ -69,10 +72,9 @@ class ServiceContainer implements ContainerInterface
         try {
             $className = $this->aliases[$id] ?? $id;
             $reflectionClass = new ReflectionClass($className);
-            $arguments = [];
 
             if ($constructor = $reflectionClass->getConstructor()) {
-                $arguments = $this->createArguments($constructor);
+                $arguments = $this->createArguments($constructor, $arguments);
             }
 
             $instance = $reflectionClass->newInstanceArgs($arguments);
@@ -118,7 +120,8 @@ class ServiceContainer implements ContainerInterface
     private function createArguments(
         ReflectionMethod|ReflectionFunction $reflectionMethod,
         array $arguments = []
-    ): array {
+    ): array
+    {
         foreach ($reflectionMethod->getParameters() as $reflectionParameter) {
             $argumentName = $reflectionParameter->getName();
 
