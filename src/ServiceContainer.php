@@ -108,6 +108,53 @@ class ServiceContainer implements ContainerInterface
     }
 
     /**
+     * @template T
+     *
+     * @param T     $classOrObject
+     * @param array $data
+     *
+     * @return T
+     * @throws ContainerException
+     *
+     */
+    public function hydrate(string|object $classOrObject, array $data = []): mixed
+    {
+        try {
+            $instance = $classOrObject;
+
+            if (is_string($instance)) {
+                $arguments = [];
+                $reflection = new ReflectionClass($instance);
+
+                if ($reflection->hasMethod('__construct')) {
+                    $reflectionMethod = $reflection->getMethod('__construct');
+                    $argumentsMap = [];
+
+                    foreach ($reflectionMethod->getParameters() as $parameter) {
+                        $reflectionType = $parameter->getType();
+
+                        $argumentsMap[$parameter->getName()] = [
+                            'type' => $reflectionType->getName(),
+                            'isBuiltin' => $reflectionType->isBuiltin(),
+                        ];
+                    }
+
+                    foreach (array_intersect_key($data, $argumentsMap) as $key => $value) {
+                        $arguments[$key] = !$argumentsMap[$key]['isBuiltin'] ?
+                            $this->hydrate($argumentsMap[$key]['type'], $value ?? []) : $value;
+                    }
+                }
+
+                $instance = $this->get($instance, $arguments);
+            }
+
+            return $instance;
+        } catch (Exception $e) {
+            throw new ContainerException('Could not hydrate object', $e->getCode(), $e);
+        }
+    }
+
+    /**
      * @param ReflectionMethod|ReflectionFunction $reflectionMethod
      * @param array                               $arguments
      *
