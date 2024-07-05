@@ -17,6 +17,7 @@ use ReflectionFunction;
 use ReflectionMethod;
 use Webdevcave\DirectoryCrawler\Crawler;
 use Webdevcave\SimpleCache\MemoryCache;
+use Webdevcave\Yadic\Annotations\ArrayOf;
 use Webdevcave\Yadic\Annotations\Inject;
 use Webdevcave\Yadic\Annotations\Provides;
 use Webdevcave\Yadic\Annotations\Singleton;
@@ -113,42 +114,22 @@ class ServiceContainer implements ContainerInterface
      * @param T     $classOrObject
      * @param array $data
      *
-     * @return T
+     * @return T|T[]
      * @throws ContainerException
      *
      */
     public function hydrate(string|object $classOrObject, array $data = []): mixed
     {
         try {
-            $instance = $classOrObject;
-
-            if (is_string($instance)) {
-                $arguments = [];
-                $reflection = new ReflectionClass($instance);
-
-                if ($reflection->hasMethod('__construct')) {
-                    $reflectionMethod = $reflection->getMethod('__construct');
-                    $argumentsMap = [];
-
-                    foreach ($reflectionMethod->getParameters() as $parameter) {
-                        $reflectionType = $parameter->getType();
-
-                        $argumentsMap[$parameter->getName()] = [
-                            'type' => $reflectionType->getName(),
-                            'isBuiltin' => $reflectionType->isBuiltin(),
-                        ];
-                    }
-
-                    foreach (array_intersect_key($data, $argumentsMap) as $key => $value) {
-                        $arguments[$key] = !$argumentsMap[$key]['isBuiltin'] ?
-                            $this->hydrate($argumentsMap[$key]['type'], $value ?? []) : $value;
-                    }
-                }
-
-                $instance = $this->get($instance, $arguments);
+            if (array_is_list($data)) {
+                return $this->hydrateArray($classOrObject, $data);
             }
 
-            return $instance;
+            if (is_string($classOrObject)) {
+                return $this->hydrateByClassName($classOrObject, $data);
+            }
+
+            return $this->hydrateExistingInstance($classOrObject, $data);
         } catch (Exception $e) {
             throw new ContainerException('Could not hydrate object', $e->getCode(), $e);
         }
@@ -266,5 +247,102 @@ class ServiceContainer implements ContainerInterface
     public function addAlias(string $alias, string $concrete): void
     {
         $this->aliases[$alias] = $concrete;
+    }
+
+    /**
+     * @template T
+     *
+     * @param T     $classOrObject
+     * @param array $data
+     *
+     * @return T[]
+     */
+    private function hydrateArray(string|object $classOrObject, array $data): mixed
+    {
+        if (is_object($classOrObject)) {
+            $classOrObject = get_class($classOrObject);
+        }
+
+        $objects = [];
+
+        foreach ($data as $item) {
+            $objects[] = $this->hydrateByClassName($classOrObject, $item);
+        }
+
+        return $objects;
+    }
+
+    /**
+     * @param string $className
+     * @param array  $data
+     *
+     * @throws ContainerException
+     * @throws ContainerExceptionInterface
+     * @throws NotFoundExceptionInterface
+     * @throws ReflectionException
+     *
+     * @return mixed
+     */
+    private function hydrateByClassName(string $className, array $data): mixed
+    {
+        $arguments = [];
+        $reflection = new ReflectionClass($className);
+
+        if ($reflection->hasMethod('__construct')) {
+            $reflectionMethod = $reflection->getMethod('__construct');
+            $argumentsMap = [];
+
+            foreach ($reflectionMethod->getParameters() as $parameter) {
+                $reflectionType = $parameter->getType();
+                $type = $reflectionType->getName();
+                $arrayType = null;
+
+                if (
+                    ($type === 'array' || $type === 'iterable')
+                    && !empty($arrayOf = $parameter->getAttributes(ArrayOf::class))
+                ) {
+                    $arrayType = $arrayOf[0]->newInstance()->target;
+                }
+
+                $argumentsMap[$parameter->getName()] = [
+                    'type' => $type,
+                    'arrayType' => $arrayType,
+                    'isBuiltin' => $reflectionType->isBuiltin(),
+                ];
+            }
+
+            foreach (array_intersect_key($data, $argumentsMap) as $key => $value) {
+                $map = $argumentsMap[$key];
+
+                if (!is_null($map['arrayType']) && is_iterable($value)) {
+                    $arguments[$key] = [];
+
+                    foreach ($value as $item) {
+                        $arguments[$key][] = $this->hydrateByClassName($map['arrayType'], $item);
+                    }
+
+                    continue;
+                }
+
+                $arguments[$key] = !$map['isBuiltin'] ?
+                    $this->hydrateByClassName($map['type'], $value ?? []) : $value;
+            }
+        }
+
+        return $this->get($className, $arguments);
+    }
+
+    /**
+     * @param object $instance
+     * @param array  $data
+     *
+     * @throws Exception
+     *
+     * @return mixed
+     */
+    private function hydrateExistingInstance(object $instance, array $data): mixed
+    {
+        //TODO implementation
+        throw new Exception('Not implemented');
     }
 }
