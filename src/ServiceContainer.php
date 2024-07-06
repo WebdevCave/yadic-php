@@ -48,6 +48,26 @@ class ServiceContainer implements ContainerInterface
     }
 
     /**
+     * @throws InvalidArgumentException
+     */
+    public function __destruct()
+    {
+        $this->cache->set('aliases', $this->aliases);
+        $this->cache->set('singletons', $this->singletons);
+    }
+
+    /**
+     * @param string $alias
+     * @param string $concrete
+     *
+     * @return void
+     */
+    public function addAlias(string $alias, string $concrete): void
+    {
+        $this->aliases[$alias] = $concrete;
+    }
+
+    /**
      * Finds an entry of the container by its identifier and returns it.
      *
      * @template T
@@ -111,86 +131,24 @@ class ServiceContainer implements ContainerInterface
     /**
      * @template T
      *
-     * @param T     $classOrObject
+     * @param T     $className
      * @param array $data
      *
-     * @return T|T[]
      * @throws ContainerException
      *
+     * @return T|T[]
      */
-    public function hydrate(string|object $classOrObject, array $data = []): mixed
+    public function hydrate(string $className, array $data = []): mixed
     {
         try {
             if (array_is_list($data)) {
-                return $this->hydrateArray($classOrObject, $data);
+                return $this->hydrateArray($className, $data);
             }
 
-            if (is_string($classOrObject)) {
-                return $this->hydrateByClassName($classOrObject, $data);
-            }
-
-            return $this->hydrateExistingInstance($classOrObject, $data);
+            return $this->hydrateByClassName($className, $data);
         } catch (Exception $e) {
             throw new ContainerException('Could not hydrate object', $e->getCode(), $e);
         }
-    }
-
-    /**
-     * @param ReflectionMethod|ReflectionFunction $reflectionMethod
-     * @param array                               $arguments
-     *
-     * @throws NotFoundExceptionInterface
-     * @throws ReflectionException
-     * @throws ContainerExceptionInterface
-     *
-     * @return array
-     */
-    private function createArguments(
-        ReflectionMethod|ReflectionFunction $reflectionMethod,
-        array $arguments = []
-    ): array {
-        foreach ($reflectionMethod->getParameters() as $reflectionParameter) {
-            $argumentName = $reflectionParameter->getName();
-
-            if (isset($arguments[$argumentName])) {
-                continue;
-            }
-
-            if ($reflectionParameter->hasType()) {
-                $reflectionType = $reflectionParameter->getType();
-                $typeAlias = null;
-
-                $injectAttrs = $reflectionParameter->getAttributes(Inject::class);
-                if (!empty($injectAttrs)) {
-                    $injectAttrs[0]->newInstance()->index;
-                }
-
-                if ($typeAlias || !$reflectionType->isBuiltin()) {
-                    $arguments[$argumentName] = $this->get($typeAlias ?? $reflectionType->getName());
-                    continue;
-                }
-
-                if (
-                    !$reflectionParameter->isDefaultValueAvailable()
-                    && !$reflectionParameter->allowsNull()
-                ) {
-                    throw new Exception("Could not inject parameter: $argumentName");
-                }
-
-                $arguments[$argumentName] = $reflectionParameter->getDefaultValue();
-            }
-        }
-
-        return $arguments;
-    }
-
-    /**
-     * @throws InvalidArgumentException
-     */
-    public function __destruct()
-    {
-        $this->cache->set('aliases', $this->aliases);
-        $this->cache->set('singletons', $this->singletons);
     }
 
     /**
@@ -239,14 +197,53 @@ class ServiceContainer implements ContainerInterface
     }
 
     /**
-     * @param string $alias
-     * @param string $concrete
+     * @param ReflectionMethod|ReflectionFunction $reflectionMethod
+     * @param array                               $arguments
      *
-     * @return void
+     * @throws NotFoundExceptionInterface
+     * @throws ReflectionException
+     * @throws ContainerExceptionInterface
+     *
+     * @return array
      */
-    public function addAlias(string $alias, string $concrete): void
+    private function createArguments(
+        ReflectionMethod|ReflectionFunction $reflectionMethod,
+        array $arguments = []
+    ): array
     {
-        $this->aliases[$alias] = $concrete;
+        foreach ($reflectionMethod->getParameters() as $reflectionParameter) {
+            $argumentName = $reflectionParameter->getName();
+
+            if (isset($arguments[$argumentName])) {
+                continue;
+            }
+
+            if ($reflectionParameter->hasType()) {
+                $reflectionType = $reflectionParameter->getType();
+                $typeAlias = null;
+
+                $injectAttrs = $reflectionParameter->getAttributes(Inject::class);
+                if (!empty($injectAttrs)) {
+                    $injectAttrs[0]->newInstance()->index;
+                }
+
+                if ($typeAlias || !$reflectionType->isBuiltin()) {
+                    $arguments[$argumentName] = $this->get($typeAlias ?? $reflectionType->getName());
+                    continue;
+                }
+
+                if (
+                    !$reflectionParameter->isDefaultValueAvailable()
+                    && !$reflectionParameter->allowsNull()
+                ) {
+                    throw new Exception("Could not inject parameter: $argumentName");
+                }
+
+                $arguments[$argumentName] = $reflectionParameter->getDefaultValue();
+            }
+        }
+
+        return $arguments;
     }
 
     /**
@@ -257,12 +254,8 @@ class ServiceContainer implements ContainerInterface
      *
      * @return T[]
      */
-    private function hydrateArray(string|object $classOrObject, array $data): mixed
+    private function hydrateArray(string $classOrObject, array $data): mixed
     {
-        if (is_object($classOrObject)) {
-            $classOrObject = get_class($classOrObject);
-        }
-
         $objects = [];
 
         foreach ($data as $item) {
@@ -330,19 +323,5 @@ class ServiceContainer implements ContainerInterface
         }
 
         return $this->get($className, $arguments);
-    }
-
-    /**
-     * @param object $instance
-     * @param array  $data
-     *
-     * @throws Exception
-     *
-     * @return mixed
-     */
-    private function hydrateExistingInstance(object $instance, array $data): mixed
-    {
-        //TODO implementation
-        throw new Exception('Not implemented');
     }
 }
