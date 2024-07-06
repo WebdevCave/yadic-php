@@ -119,8 +119,8 @@ class ServiceContainerTest extends TestCase
     public function testHydrationForMatrix()
     {
         $data = [
-            'name' => 'John Doe',
-            'age' => 25,
+            'name'   => 'John Doe',
+            'age'    => 25,
             'skills' => [
                 ['title' => 'PHP'],
                 ['title' => 'Java'],

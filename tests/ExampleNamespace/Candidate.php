@@ -11,7 +11,6 @@ class Candidate
         public ?int $age = null,
         #[ArrayOf(Skill::class)]
         public array $skills = []
-    )
-    {
+    ) {
     }
 }

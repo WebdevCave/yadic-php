@@ -6,7 +6,6 @@ class Skill
 {
     public function __construct(
         public string $title,
-    )
-    {
+    ) {
     }
 }

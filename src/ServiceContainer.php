@@ -209,8 +209,7 @@ class ServiceContainer implements ContainerInterface
     private function createArguments(
         ReflectionMethod|ReflectionFunction $reflectionMethod,
         array $arguments = []
-    ): array
-    {
+    ): array {
         foreach ($reflectionMethod->getParameters() as $reflectionParameter) {
             $argumentName = $reflectionParameter->getName();
 
@@ -298,7 +297,7 @@ class ServiceContainer implements ContainerInterface
                 }
 
                 $argumentsMap[$parameter->getName()] = [
-                    'type' => $type,
+                    'type'      => $type,
                     'arrayType' => $arrayType,
                     'isBuiltin' => $reflectionType->isBuiltin(),
                 ];
