@@ -17,6 +17,7 @@ use ReflectionFunction;
 use ReflectionMethod;
 use Webdevcave\DirectoryCrawler\Crawler;
 use Webdevcave\SimpleCache\MemoryCache;
+use Webdevcave\Yadic\Annotations\ArrayOf;
 use Webdevcave\Yadic\Annotations\Inject;
 use Webdevcave\Yadic\Annotations\Provides;
 use Webdevcave\Yadic\Annotations\Singleton;
@@ -44,6 +45,26 @@ class ServiceContainer implements ContainerInterface
         $this->cache = $cache;
         $this->aliases = $cache->get('aliases', []);
         $this->singletons = $cache->get('singletons', []);
+    }
+
+    /**
+     * @throws InvalidArgumentException
+     */
+    public function __destruct()
+    {
+        $this->cache->set('aliases', $this->aliases);
+        $this->cache->set('singletons', $this->singletons);
+    }
+
+    /**
+     * @param string $alias
+     * @param string $concrete
+     *
+     * @return void
+     */
+    public function addAlias(string $alias, string $concrete): void
+    {
+        $this->aliases[$alias] = $concrete;
     }
 
     /**
@@ -108,6 +129,74 @@ class ServiceContainer implements ContainerInterface
     }
 
     /**
+     * @template T
+     *
+     * @param T     $className
+     * @param array $data
+     *
+     * @throws ContainerException
+     *
+     * @return T|T[]
+     */
+    public function hydrate(string $className, array $data = []): mixed
+    {
+        try {
+            if (array_is_list($data)) {
+                return $this->hydrateArray($className, $data);
+            }
+
+            return $this->hydrateByClassName($className, $data);
+        } catch (Exception $e) {
+            throw new ContainerException('Could not hydrate object', $e->getCode(), $e);
+        }
+    }
+
+    /**
+     * @param callable $function
+     * @param array    $arguments
+     *
+     * @throws NotFoundExceptionInterface
+     * @throws ReflectionException
+     * @throws ContainerExceptionInterface
+     *
+     * @return mixed
+     */
+    public function invoke(callable $function, array $arguments = []): mixed
+    {
+        $reflection = new ReflectionFunction(Closure::fromCallable($function));
+        $arguments = $this->createArguments($reflection, $arguments);
+
+        return $reflection->invokeArgs($arguments);
+    }
+
+    /**
+     * @param string $directory
+     * @param string $namespace
+     * @param bool   $enforce
+     *
+     * @throws ReflectionException
+     *
+     * @return void
+     */
+    public function loadDefinitionsFromDirectory(string $directory, string $namespace, bool $enforce = false): void
+    {
+        $crawler = new Crawler($directory);
+        $classes = $crawler->classes($namespace, $enforce);
+
+        foreach ($classes as $class) {
+            $reflectionClass = new ReflectionClass($class);
+
+            if ($provideAttrs = $reflectionClass->getAttributes(Provides::class)) {
+                foreach ($provideAttrs as $attr) {
+                    /* @var $provide Provides */
+                    $provide = $attr->newInstance();
+                    $this->addAlias($provide->index, $class);
+                }
+            }
+        }
+    }
+
+    /**
      * @param ReflectionMethod|ReflectionFunction $reflectionMethod
      * @param array                               $arguments
      *
@@ -157,67 +246,81 @@ class ServiceContainer implements ContainerInterface
     }
 
     /**
-     * @throws InvalidArgumentException
+     * @template T
+     *
+     * @param T     $classOrObject
+     * @param array $data
+     *
+     * @return T[]
      */
-    public function __destruct()
+    private function hydrateArray(string $classOrObject, array $data): mixed
     {
-        $this->cache->set('aliases', $this->aliases);
-        $this->cache->set('singletons', $this->singletons);
+        $objects = [];
+
+        foreach ($data as $item) {
+            $objects[] = $this->hydrateByClassName($classOrObject, $item);
+        }
+
+        return $objects;
     }
 
     /**
-     * @param callable $function
-     * @param array    $arguments
+     * @param string $className
+     * @param array  $data
      *
+     * @throws ContainerException
+     * @throws ContainerExceptionInterface
      * @throws NotFoundExceptionInterface
      * @throws ReflectionException
-     * @throws ContainerExceptionInterface
      *
      * @return mixed
      */
-    public function invoke(callable $function, array $arguments = []): mixed
+    private function hydrateByClassName(string $className, array $data): mixed
     {
-        $reflection = new ReflectionFunction(Closure::fromCallable($function));
-        $arguments = $this->createArguments($reflection, $arguments);
+        $arguments = [];
+        $reflection = new ReflectionClass($className);
 
-        return $reflection->invokeArgs($arguments);
-    }
+        if ($reflection->hasMethod('__construct')) {
+            $reflectionMethod = $reflection->getMethod('__construct');
+            $argumentsMap = [];
 
-    /**
-     * @param string $directory
-     * @param string $namespace
-     * @param bool   $enforce
-     *
-     * @throws ReflectionException
-     *
-     * @return void
-     */
-    public function loadDefinitionsFromDirectory(string $directory, string $namespace, bool $enforce = false): void
-    {
-        $crawler = new Crawler($directory);
-        $classes = $crawler->classes($namespace, $enforce);
+            foreach ($reflectionMethod->getParameters() as $parameter) {
+                $reflectionType = $parameter->getType();
+                $type = $reflectionType->getName();
+                $arrayType = null;
 
-        foreach ($classes as $class) {
-            $reflectionClass = new ReflectionClass($class);
-
-            if ($provideAttrs = $reflectionClass->getAttributes(Provides::class)) {
-                foreach ($provideAttrs as $attr) {
-                    /* @var $provide Provides */
-                    $provide = $attr->newInstance();
-                    $this->addAlias($provide->index, $class);
+                if (
+                    ($type === 'array' || $type === 'iterable')
+                    && !empty($arrayOf = $parameter->getAttributes(ArrayOf::class))
+                ) {
+                    $arrayType = $arrayOf[0]->newInstance()->target;
                 }
+
+                $argumentsMap[$parameter->getName()] = [
+                    'type'      => $type,
+                    'arrayType' => $arrayType,
+                    'isBuiltin' => $reflectionType->isBuiltin(),
+                ];
+            }
+
+            foreach (array_intersect_key($data, $argumentsMap) as $key => $value) {
+                $map = $argumentsMap[$key];
+
+                if (!is_null($map['arrayType']) && is_iterable($value)) {
+                    $arguments[$key] = [];
+
+                    foreach ($value as $item) {
+                        $arguments[$key][] = $this->hydrateByClassName($map['arrayType'], $item);
+                    }
+
+                    continue;
+                }
+
+                $arguments[$key] = !$map['isBuiltin'] ?
+                    $this->hydrateByClassName($map['type'], $value ?? []) : $value;
             }
         }
-    }
 
-    /**
-     * @param string $alias
-     * @param string $concrete
-     *
-     * @return void
-     */
-    public function addAlias(string $alias, string $concrete): void
-    {
-        $this->aliases[$alias] = $concrete;
+        return $this->get($className, $arguments);
     }
 }

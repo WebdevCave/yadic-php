@@ -5,22 +5,26 @@ namespace Webdevcave\Yadic\Tests;
 use Exception;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\TestCase;
+use Webdevcave\Yadic\Annotations\ArrayOf;
 use Webdevcave\Yadic\Annotations\Inject;
 use Webdevcave\Yadic\Annotations\Provides;
 use Webdevcave\Yadic\Annotations\Singleton;
 use Webdevcave\Yadic\Exceptions\ContainerException;
 use Webdevcave\Yadic\Exceptions\NotFoundException;
 use Webdevcave\Yadic\ServiceContainer;
+use Webdevcave\Yadic\Tests\ExampleNamespace\Candidate;
 use Webdevcave\Yadic\Tests\ExampleNamespace\ClassA;
 use Webdevcave\Yadic\Tests\ExampleNamespace\ClassB;
 use Webdevcave\Yadic\Tests\ExampleNamespace\ClassC;
 use Webdevcave\Yadic\Tests\ExampleNamespace\ClassD;
 use Webdevcave\Yadic\Tests\ExampleNamespace\InterfaceA;
+use Webdevcave\Yadic\Tests\ExampleNamespace\Skill;
 
 #[CoversClass(ServiceContainer::class)]
 #[CoversClass(Provides::class)]
 #[CoversClass(Inject::class)]
 #[CoversClass(Singleton::class)]
+#[CoversClass(ArrayOf::class)]
 class ServiceContainerTest extends TestCase
 {
     private ?ServiceContainer $container;
@@ -93,6 +97,46 @@ class ServiceContainerTest extends TestCase
         $this->expectException(ContainerException::class);
 
         $this->container->get(ClassD::class);
+    }
+
+    public function testHydrationForVector()
+    {
+        $data = [
+            ['title' => 'PHP'],
+            ['title' => 'Java'],
+            ['title' => 'Rust'],
+            ['title' => 'React'],
+        ];
+        $instances = $this->container->hydrate(Skill::class, $data);
+
+        $this->assertContainsOnlyInstancesOf(Skill::class, $instances);
+
+        foreach ($data as $key => $skill) {
+            $this->assertEquals($skill['title'], $instances[$key]->title);
+        }
+    }
+
+    public function testHydrationForMatrix()
+    {
+        $data = [
+            'name'   => 'John Doe',
+            'age'    => 25,
+            'skills' => [
+                ['title' => 'PHP'],
+                ['title' => 'Java'],
+                ['title' => 'Rust'],
+                ['title' => 'React'],
+            ],
+        ];
+        $instance = $this->container->hydrate(Candidate::class, $data);
+
+        $this->assertInstanceOf(Candidate::class, $instance);
+        $this->assertEquals($data['name'], $instance->name);
+        $this->assertEquals($data['age'], $instance->age);
+
+        foreach ($data['skills'] as $key => $skill) {
+            $this->assertEquals($skill['title'], $instance->skills[$key]->title);
+        }
     }
 
     protected function setUp(): void

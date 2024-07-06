@@ -8,7 +8,7 @@
 [![codecov](https://codecov.io/github/WebdevCave/yadic-php/graph/badge.svg?token=6GLECJQG16)](https://codecov.io/github/WebdevCave/yadic-php)
 
 This is a simple to use, yet powerful service container that provides a seamless way to automate dependency injection
-with auto-wiring.
+featuring auto-wiring and object hydration.
 
 ```bash
 composer require webdevcave/yadic
@@ -17,6 +17,8 @@ composer require webdevcave/yadic
 Alternatively, you can clone the repository or download the source files directly and include them in your project.
 
 ## Usage
+
+### Autowiring
 
 ```php
 <?php
@@ -68,6 +70,120 @@ $container->addAlias(StorageInterface::class, Storage::class);
 //var_dump($container->get('storage')->store($data));
 
 var_dump($container->get(MyController::class)->save()); //bool(true)
+```
+
+### Invoking a method ft. autowiring
+
+```php
+$arguments = ['nonInjectableArgument' => 'value']; //optional
+$container->invoke([$instance, 'methodName'], $arguments);
+```
+
+### Hydration
+
+```php
+//Class declarations:
+
+use Webdevcave\Yadic\Annotations\ArrayOf;
+
+class Candidate
+{
+    public function __construct(
+        public ?string $name = null,
+        public ?int $age = null,
+        #[ArrayOf(Skill::class)]
+        public array $skills = []
+    ) {
+    }
+}
+
+class Skill
+{
+    public function __construct(
+        public string $title,
+    ) {
+    }
+}
+
+// Hydration example 1:
+$data = [
+    'name'   => 'John Doe',
+    'age'    => 25,
+    'skills' => [
+        ['title' => 'PHP'],
+        ['title' => 'Java'],
+        ['title' => 'Rust'],
+        ['title' => 'React'],
+    ],
+];
+$instance = $container->hydrate(Candidate::class, $data);
+
+//Results output
+/*
+print_r($instance);
+This test printed output: 
+Candidate Object
+(
+    [name] => John Doe
+    [age] => 25
+    [skills] => Array
+        (
+            [0] => Skill Object
+                (
+                    [title] => PHP
+                )
+
+            [1] => Skill Object
+                (
+                    [title] => Java
+                )
+
+            [2] => Skill Object
+                (
+                    [title] => Rust
+                )
+
+            [3] => Skill Object
+                (
+                    [title] => React
+                )
+
+        )
+
+)
+ */
+
+// Hydration example 2:
+$data = [
+    [
+        'name' => 'Foo',
+        //...
+    ],
+    [
+        'name' => 'Bar',
+        //...
+    ]
+];
+$instances = $container->hydrate(Candidate::class, $data);
+//Results output
+/*
+print_r($instances);
+This test printed output: 
+Array
+(
+    [0] => Candidate Object
+        (
+            [name] => Foo
+            //...
+        )
+
+    [1] => Candidate Object
+        (
+            [name] => Bar
+            //...
+        )
+)
+ */
 ```
 
 ## Contributing

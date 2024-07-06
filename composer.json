@@ -9,7 +9,8 @@
     "autowiring",
     "repository",
     "container",
-    "service-container"
+    "service-container",
+    "hydration"
   ],
   "autoload": {
     "psr-4": {
