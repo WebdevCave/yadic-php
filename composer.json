@@ -29,22 +29,24 @@
     }
   ],
   "require": {
-    "php": ">=8.1",
+    "php": ">=8.3",
     "psr/container": "^2.0",
     "psr/simple-cache": "^3.0",
     "webdevcave/directory-crawler": "^1.1",
     "webdevcave/simple-cache": "^1.0"
   },
   "require-dev": {
-    "phpunit/phpunit": "^10",
+    "phpunit/phpunit": "^12",
     "rregeer/phpunit-coverage-check": "^0.3.1"
   },
   "scripts": {
-    "test": "XDEBUG_MODE=coverage ./vendor/bin/phpunit",
+    "test": "./vendor/bin/phpunit",
+    "test-coverage": "XDEBUG_MODE=coverage ./vendor/bin/phpunit --coverage-text=build/coverage.txt --coverage-html=build/coverage --coverage-clover=build/coverage-clover.xml",
     "check-coverage": "./vendor/bin/coverage-check ./build/coverage-clover.xml 85"
   },
   "scripts-descriptions": {
-    "test": "Run PHPUNIT tests"
+    "test": "Run PHPUnit tests",
+    "test-coverage": "Run PHPUnit tests and generate coverage reports (requires Xdebug or PCOV)"
   },
   "provide": {
     "psr/container-implementation": "2"

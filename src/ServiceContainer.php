@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Webdevcave\Yadic;
 
+use BackedEnum;
 use Closure;
 use Exception;
 use Psr\Container\ContainerExceptionInterface;
@@ -15,6 +16,10 @@ use ReflectionClass;
 use ReflectionException;
 use ReflectionFunction;
 use ReflectionMethod;
+use ReflectionNamedType;
+use ReflectionParameter;
+use ReflectionUnionType;
+use Throwable;
 use Webdevcave\DirectoryCrawler\Crawler;
 use Webdevcave\SimpleCache\MemoryCache;
 use Webdevcave\Yadic\Annotations\ArrayOf;
@@ -35,7 +40,7 @@ class ServiceContainer implements ContainerInterface
      *
      * @throws InvalidArgumentException
      */
-    public function __construct(CacheInterface $cache = null)
+    public function __construct(?CacheInterface $cache = null)
     {
         //Fallback to an in-memory cache
         if (is_null($cache)) {
@@ -105,7 +110,7 @@ class ServiceContainer implements ContainerInterface
             }
 
             return $instance;
-        } catch (Exception $previous) {
+        } catch (Throwable $previous) {
             throw new ContainerException($previous->getMessage(), $previous->getCode(), $previous);
         }
     }
@@ -146,7 +151,7 @@ class ServiceContainer implements ContainerInterface
             }
 
             return $this->hydrateByClassName($className, $data);
-        } catch (Exception $e) {
+        } catch (Throwable $e) {
             throw new ContainerException('Could not hydrate object', $e->getCode(), $e);
         }
     }
@@ -213,36 +218,105 @@ class ServiceContainer implements ContainerInterface
         foreach ($reflectionMethod->getParameters() as $reflectionParameter) {
             $argumentName = $reflectionParameter->getName();
 
-            if (isset($arguments[$argumentName])) {
+            if (array_key_exists($argumentName, $arguments)) {
                 continue;
             }
 
-            if ($reflectionParameter->hasType()) {
-                $reflectionType = $reflectionParameter->getType();
-                $typeAlias = null;
+            $injectAttrs = $reflectionParameter->getAttributes(Inject::class);
+            $typeAlias = !empty($injectAttrs) ? $injectAttrs[0]->newInstance()->index : null;
 
-                $injectAttrs = $reflectionParameter->getAttributes(Inject::class);
-                if (!empty($injectAttrs)) {
-                    $injectAttrs[0]->newInstance()->index;
-                }
+            if ($typeAlias) {
+                $arguments[$argumentName] = $this->get($typeAlias);
+                continue;
+            }
 
-                if ($typeAlias || !$reflectionType->isBuiltin()) {
-                    $arguments[$argumentName] = $this->get($typeAlias ?? $reflectionType->getName());
+            if (!$reflectionParameter->hasType()) {
+                continue;
+            }
+
+            $types = $this->extractTypes($reflectionParameter);
+            $candidates = array_values(array_filter($types, fn (array $type) => !$type['isBuiltin']));
+            $lastError = null;
+
+            foreach ($candidates as $candidate) {
+                // Enums can't be instantiated, so they are never autowired
+                if (!$this->has($candidate['name']) || enum_exists($candidate['name'])) {
                     continue;
                 }
 
-                if (
-                    !$reflectionParameter->isDefaultValueAvailable()
-                    && !$reflectionParameter->allowsNull()
-                ) {
-                    throw new Exception("Could not inject parameter: $argumentName");
+                try {
+                    $arguments[$argumentName] = $this->get($candidate['name']);
+                    continue 2;
+                } catch (Throwable $e) {
+                    $lastError = $e;
                 }
-
-                $arguments[$argumentName] = $reflectionParameter->getDefaultValue();
             }
+
+            if ($reflectionParameter->isDefaultValueAvailable()) {
+                $arguments[$argumentName] = $reflectionParameter->getDefaultValue();
+                continue;
+            }
+
+            // A parameter typed with a single class keeps propagating the autowiring error,
+            // while nullable union types fall back to null.
+            $isUnion = count(array_filter($types, fn (array $type) => $type['name'] !== 'null')) > 1;
+
+            if ($reflectionParameter->allowsNull() && (!$lastError || $isUnion)) {
+                $arguments[$argumentName] = null;
+                continue;
+            }
+
+            if ($lastError) {
+                throw $lastError;
+            }
+
+            throw new Exception("Could not inject parameter: $argumentName");
         }
 
         return $arguments;
+    }
+
+    /**
+     * Flattens the declared type of parameter into a list of named types.
+     * Intersection types (including DNF groups) cannot be instantiated and are ignored.
+     *
+     * @param ReflectionParameter $parameter
+     *
+     * @return array<int, array{name: string, isBuiltin: bool}>
+     */
+    private function extractTypes(ReflectionParameter $parameter): array
+    {
+        $reflectionType = $parameter->getType();
+
+        $namedTypes = match (true) {
+            $reflectionType instanceof ReflectionNamedType => [$reflectionType],
+            $reflectionType instanceof ReflectionUnionType => array_filter(
+                $reflectionType->getTypes(),
+                fn ($type) => $type instanceof ReflectionNamedType
+            ),
+            default => [],
+        };
+
+        $types = [];
+
+        foreach ($namedTypes as $namedType) {
+            $name = $namedType->getName();
+            $isBuiltin = $namedType->isBuiltin();
+
+            if (!$isBuiltin) {
+                $lower = strtolower($name);
+
+                if ($lower === 'self' || $lower === 'static') {
+                    $name = $parameter->getDeclaringClass()?->getName() ?? $name;
+                } elseif ($lower === 'parent') {
+                    $name = $parameter->getDeclaringClass()?->getParentClass()?->getName() ?? $name;
+                }
+            }
+
+            $types[] = ['name' => $name, 'isBuiltin' => $isBuiltin];
+        }
+
+        return $types;
     }
 
     /**
@@ -258,7 +332,7 @@ class ServiceContainer implements ContainerInterface
         $objects = [];
 
         foreach ($data as $item) {
-            $objects[] = $this->hydrateByClassName($classOrObject, $item);
+            $objects[] = $this->hydrateItem($classOrObject, $item);
         }
 
         return $objects;
@@ -280,47 +354,180 @@ class ServiceContainer implements ContainerInterface
         $arguments = [];
         $reflection = new ReflectionClass($className);
 
-        if ($reflection->hasMethod('__construct')) {
-            $reflectionMethod = $reflection->getMethod('__construct');
+        if ($reflectionMethod = $reflection->getConstructor()) {
             $argumentsMap = [];
 
             foreach ($reflectionMethod->getParameters() as $parameter) {
-                $reflectionType = $parameter->getType();
-                $type = $reflectionType->getName();
+                $types = $this->extractTypes($parameter);
+                $typeNames = array_column($types, 'name');
                 $arrayType = null;
 
                 if (
-                    ($type === 'array' || $type === 'iterable')
+                    (in_array('array', $typeNames, true) || in_array('iterable', $typeNames, true))
                     && !empty($arrayOf = $parameter->getAttributes(ArrayOf::class))
                 ) {
                     $arrayType = $arrayOf[0]->newInstance()->target;
                 }
 
                 $argumentsMap[$parameter->getName()] = [
-                    'type'      => $type,
-                    'arrayType' => $arrayType,
-                    'isBuiltin' => $reflectionType->isBuiltin(),
+                    'classes'     => array_column(
+                        array_filter($types, fn (array $type) => !$type['isBuiltin']),
+                        'name'
+                    ),
+                    'arrayType'    => $arrayType,
+                    'acceptsArray' => !$parameter->hasType()
+                        || !empty(array_intersect(['array', 'iterable', 'mixed'], $typeNames)),
+                    'acceptsScalar' => !$parameter->hasType()
+                        || !empty(array_intersect(
+                            ['string', 'int', 'float', 'bool', 'false', 'true', 'mixed'],
+                            $typeNames
+                        )),
+                    'allowsNull' => $parameter->allowsNull(),
                 ];
             }
 
             foreach (array_intersect_key($data, $argumentsMap) as $key => $value) {
-                $map = $argumentsMap[$key];
-
-                if (!is_null($map['arrayType']) && is_iterable($value)) {
-                    $arguments[$key] = [];
-
-                    foreach ($value as $item) {
-                        $arguments[$key][] = $this->hydrateByClassName($map['arrayType'], $item);
-                    }
-
-                    continue;
-                }
-
-                $arguments[$key] = !$map['isBuiltin'] ?
-                    $this->hydrateByClassName($map['type'], $value ?? []) : $value;
+                $arguments[$key] = $this->hydrateValue($argumentsMap[$key], $value);
             }
         }
 
         return $this->get($className, $arguments);
+    }
+
+    /**
+     * Hydrates a single item of a collection. Items already instantiated are kept as is.
+     *
+     * @param string $className
+     * @param mixed  $item
+     *
+     * @return mixed
+     */
+    private function hydrateItem(string $className, mixed $item): mixed
+    {
+        if ($item instanceof $className) {
+            return $item;
+        }
+
+        if (is_subclass_of($className, BackedEnum::class) && (is_int($item) || is_string($item))) {
+            return $className::from($item);
+        }
+
+        return $this->hydrateByClassName($className, $item ?? []);
+    }
+
+    /**
+     * Converts a raw value into the argument expected by a constructor parameter.
+     *
+     * @param array $map   Parameter metadata built by hydrateByClassName()
+     * @param mixed $value Raw value
+     *
+     * @throws Throwable
+     *
+     * @return mixed
+     */
+    private function hydrateValue(array $map, mixed $value): mixed
+    {
+        if (is_null($value) && $map['allowsNull']) {
+            return null;
+        }
+
+        if (!is_null($map['arrayType']) && is_iterable($value)) {
+            $items = [];
+
+            foreach ($value as $item) {
+                $items[] = $this->hydrateItem($map['arrayType'], $item);
+            }
+
+            return $items;
+        }
+
+        $classes = $map['classes'];
+
+        if (empty($classes) || is_object($value)) {
+            return $value;
+        }
+
+        // Scalars: only backed enums can be built from them
+        if (!is_null($value) && !is_array($value)) {
+            foreach ($classes as $class) {
+                if (is_subclass_of($class, BackedEnum::class) && (is_int($value) || is_string($value))) {
+                    if ($map['acceptsScalar'] || count($classes) > 1) {
+                        if ($enum = $class::tryFrom($value)) {
+                            return $enum;
+                        }
+
+                        continue;
+                    }
+
+                    return $class::from($value);
+                }
+            }
+
+            return $value;
+        }
+
+        // Plain lists are kept as is when the parameter accepts arrays (e.g. array|Collection)
+        if (is_array($value) && $map['acceptsArray'] && array_is_list($value)) {
+            return $value;
+        }
+
+        $data = $value ?? [];
+        $candidates = array_values(array_filter(
+            $classes,
+            fn (string $class) => (class_exists($class) || isset($this->aliases[$class]))
+                && !is_subclass_of($class, BackedEnum::class)
+        ));
+
+        if (count($candidates) === 1 && !$map['acceptsArray']) {
+            return $this->hydrateByClassName($candidates[0], $data);
+        }
+
+        // Union types: try the classes whose constructors best match the given keys first
+        $scores = [];
+        foreach ($candidates as $index => $class) {
+            $scores[$index] = $this->matchScore($class, $data);
+        }
+        uksort($scores, fn ($a, $b) => [$scores[$b], $a] <=> [$scores[$a], $b]);
+
+        $lastError = null;
+
+        foreach (array_keys($scores) as $index) {
+            try {
+                return $this->hydrateByClassName($candidates[$index], $data);
+            } catch (Throwable $e) {
+                $lastError = $e;
+            }
+        }
+
+        if ($map['acceptsArray']) {
+            return $value;
+        }
+
+        throw $lastError ?? new Exception('No hydratable type found for the given value');
+    }
+
+    /**
+     * Counts how many keys of $data match the constructor parameters of $className.
+     *
+     * @param string $className
+     * @param array  $data
+     *
+     * @return int
+     */
+    private function matchScore(string $className, array $data): int
+    {
+        try {
+            $constructor = (new ReflectionClass($this->aliases[$className] ?? $className))->getConstructor();
+        } catch (ReflectionException) {
+            return -1;
+        }
+
+        if (!$constructor) {
+            return 0;
+        }
+
+        $names = array_map(fn (ReflectionParameter $p) => $p->getName(), $constructor->getParameters());
+
+        return count(array_intersect(array_keys($data), $names));
     }
 }

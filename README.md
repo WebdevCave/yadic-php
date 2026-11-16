@@ -10,6 +10,8 @@
 This is a simple to use, yet powerful service container that provides a seamless way to automate dependency injection
 featuring auto-wiring and object hydration.
 
+Requires PHP 8.3 or newer.
+
 ```bash
 composer require webdevcave/yadic
 ```
@@ -184,6 +186,33 @@ Array
         )
 )
  */
+```
+
+#### Union types and enums
+
+Constructor parameters declared with union types (including DNF types) are supported:
+
+- `null` is kept when the parameter is nullable;
+- objects that are already instances are passed through untouched;
+- scalars are kept as is, except for backed enums, which are built with `from()`/`tryFrom()`;
+- arrays are hydrated into the class whose constructor best matches the given keys. If that fails,
+  the next candidate is tried. Plain lists, or arrays no class can be built from, are kept as is
+  when the parameter also accepts `array`.
+
+```php
+class Profile
+{
+    public function __construct(
+        public Address|GeoPoint|string|null $location = null,
+        public Status|null $status = null, // backed enum
+    ) {
+    }
+}
+
+$profile = $container->hydrate(Profile::class, [
+    'location' => ['lat' => -23.5, 'lng' => -46.6], // GeoPoint
+    'status'   => 'active',                         // Status::Active
+]);
 ```
 
 ## Contributing

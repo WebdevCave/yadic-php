@@ -12,13 +12,19 @@ use Webdevcave\Yadic\Annotations\Singleton;
 use Webdevcave\Yadic\Exceptions\ContainerException;
 use Webdevcave\Yadic\Exceptions\NotFoundException;
 use Webdevcave\Yadic\ServiceContainer;
+use Webdevcave\Yadic\Tests\ExampleNamespace\Address;
 use Webdevcave\Yadic\Tests\ExampleNamespace\Candidate;
 use Webdevcave\Yadic\Tests\ExampleNamespace\ClassA;
 use Webdevcave\Yadic\Tests\ExampleNamespace\ClassB;
 use Webdevcave\Yadic\Tests\ExampleNamespace\ClassC;
 use Webdevcave\Yadic\Tests\ExampleNamespace\ClassD;
+use Webdevcave\Yadic\Tests\ExampleNamespace\DnfHolder;
+use Webdevcave\Yadic\Tests\ExampleNamespace\GeoPoint;
 use Webdevcave\Yadic\Tests\ExampleNamespace\InterfaceA;
+use Webdevcave\Yadic\Tests\ExampleNamespace\Profile;
 use Webdevcave\Yadic\Tests\ExampleNamespace\Skill;
+use Webdevcave\Yadic\Tests\ExampleNamespace\Status;
+use Webdevcave\Yadic\Tests\ExampleNamespace\UnionConsumer;
 
 #[CoversClass(ServiceContainer::class)]
 #[CoversClass(Provides::class)]
@@ -137,6 +143,142 @@ class ServiceContainerTest extends TestCase
         foreach ($data['skills'] as $key => $skill) {
             $this->assertEquals($skill['title'], $instance->skills[$key]->title);
         }
+    }
+
+    public function testHydrationWithUnionTypeBuildsObjectFromArray(): void
+    {
+        $profile = $this->container->hydrate(Profile::class, [
+            'address' => ['street' => 'Main St', 'city' => 'Springfield'],
+        ]);
+
+        $this->assertInstanceOf(Address::class, $profile->address);
+        $this->assertEquals('Main St', $profile->address->street);
+        $this->assertEquals('Springfield', $profile->address->city);
+    }
+
+    public function testHydrationWithUnionTypeKeepsScalarsAndNull(): void
+    {
+        $profile = $this->container->hydrate(Profile::class, ['address' => 'Main St, 42', 'location' => null]);
+        $this->assertSame('Main St, 42', $profile->address);
+        $this->assertNull($profile->location);
+
+        $profile = $this->container->hydrate(Profile::class, ['code' => 'ABC']);
+        $this->assertSame('ABC', $profile->code);
+
+        $profile = $this->container->hydrate(Profile::class, ['code' => 10]);
+        $this->assertSame(10, $profile->code);
+    }
+
+    public function testHydrationWithUnionTypePicksBestMatchingClass(): void
+    {
+        $profile = $this->container->hydrate(Profile::class, ['location' => ['lat' => -23.5, 'lng' => -46.6]]);
+        $this->assertInstanceOf(GeoPoint::class, $profile->location);
+        $this->assertEquals(-23.5, $profile->location->lat);
+
+        $profile = $this->container->hydrate(Profile::class, ['location' => ['street' => 'Main St']]);
+        $this->assertInstanceOf(Address::class, $profile->location);
+    }
+
+    public function testHydrationWithUnionTypeKeepsInstantiatedObjects(): void
+    {
+        $address = new Address('Main St');
+        $profile = $this->container->hydrate(Profile::class, ['address' => $address, 'location' => $address]);
+
+        $this->assertSame($address, $profile->address);
+        $this->assertSame($address, $profile->location);
+    }
+
+    public function testHydrationWithArrayUnionType(): void
+    {
+        $profile = $this->container->hydrate(Profile::class, ['extra' => ['a', 'b']]);
+        $this->assertSame(['a', 'b'], $profile->extra);
+
+        $profile = $this->container->hydrate(Profile::class, ['extra' => ['street' => 'Main St']]);
+        $this->assertInstanceOf(Address::class, $profile->extra);
+
+        $profile = $this->container->hydrate(Profile::class, ['extra' => ['foo' => 'bar']]);
+        $this->assertSame(['foo' => 'bar'], $profile->extra);
+    }
+
+    public function testHydrationWithArrayOfInUnionType(): void
+    {
+        $profile = $this->container->hydrate(Profile::class, [
+            'skills' => [['title' => 'PHP'], new Skill('Go')],
+        ]);
+
+        $this->assertContainsOnlyInstancesOf(Skill::class, $profile->skills);
+        $this->assertEquals('PHP', $profile->skills[0]->title);
+        $this->assertEquals('Go', $profile->skills[1]->title);
+
+        $profile = $this->container->hydrate(Profile::class, ['skills' => null]);
+        $this->assertNull($profile->skills);
+    }
+
+    public function testHydrationWithEnums(): void
+    {
+        $profile = $this->container->hydrate(Profile::class, [
+            'status'       => 'active',
+            'strictStatus' => 'inactive',
+        ]);
+        $this->assertSame(Status::Active, $profile->status);
+        $this->assertSame(Status::Inactive, $profile->strictStatus);
+
+        $profile = $this->container->hydrate(Profile::class, ['status' => 'unknown']);
+        $this->assertSame('unknown', $profile->status);
+
+        $this->expectException(ContainerException::class);
+        $this->container->hydrate(Profile::class, ['strictStatus' => 'unknown']);
+    }
+
+    public function testHydrationWithUntypedParameter(): void
+    {
+        $profile = $this->container->hydrate(Profile::class, ['untyped' => ['any' => 'value']]);
+
+        $this->assertSame(['any' => 'value'], $profile->untyped);
+    }
+
+    public function testHydrationWithInvalidUnionValueThrowsContainerException(): void
+    {
+        $this->expectException(ContainerException::class);
+
+        $this->container->hydrate(Profile::class, ['location' => ['unknown' => true]]);
+    }
+
+    public function testHydrationWithDnfType(): void
+    {
+        $holder = $this->container->hydrate(DnfHolder::class, ['value' => ['street' => 'Main St']]);
+
+        $this->assertInstanceOf(Address::class, $holder->value);
+    }
+
+    public function testAutowiringWithUnionTypes(): void
+    {
+        $this->container->loadDefinitionsFromDirectory(
+            __DIR__.'/ExampleNamespace',
+            __NAMESPACE__.'\\ExampleNamespace\\'
+        );
+
+        $consumer = $this->container->get(UnionConsumer::class);
+
+        $this->assertInstanceOf(ClassA::class, $consumer->dependency);
+        $this->assertSame(3, $consumer->number);
+        $this->assertNull($consumer->optional);
+        $this->assertInstanceOf(ClassA::class, $consumer->aliased);
+    }
+
+    public function testAutowiringWithUnionTypesAcceptsExplicitNull(): void
+    {
+        $consumer = $this->container->get(UnionConsumer::class, ['aliased' => null]);
+
+        $this->assertNull($consumer->aliased);
+    }
+
+    public function testInvokeWithUnionTypes(): void
+    {
+        $result = $this->container->invoke(fn (ClassD|ClassA $dep, int|string $x = 'y') => [$dep, $x]);
+
+        $this->assertInstanceOf(ClassA::class, $result[0]);
+        $this->assertSame('y', $result[1]);
     }
 
     protected function setUp(): void
